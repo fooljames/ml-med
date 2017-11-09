@@ -1,0 +1,80 @@
+id,name
+dataset_a0050,Expired O2
+dataset_a0404,Respiratory Rate
+dataset_a0419,Inspired O2 (FiO2)
+dataset_a0577,Mean Airway Pressure
+dataset_a0780,Inspiratory Pause Setting
+dataset_a1316,Dynamic Compliance
+dataset_a1318,Static Compliance
+dataset_a1320,Respiration Rate Setting
+dataset_a1321,Tidal Volume Setting
+dataset_a1333,Minute Volume (Spontaneous)
+dataset_a1341,Vital Capacity
+dataset_a1349,Inspiratory Component of I:E Ratio
+dataset_a1350,Expiratory Component of I:E Ratio
+dataset_a1383,Flow Trigger Setting
+dataset_a1387,Low Pressure Setting
+dataset_a1388,Low Time Setting
+dataset_a1389,High Pressure Setting
+dataset_a1390,High Time Setting
+dataset_a1395,Pressure Trigger Setting
+dataset_a1399,Minute Volume Lower Alarm Limit
+dataset_a1400,Minute Volume Upper Alarm Limit
+dataset_a1422,Rapid Shallow Breathing Index
+dataset_a1426,Intrinsic PEEP
+dataset_a1761,Airway Resistance
+dataset_a1762,Extrinsic PEEP
+dataset_a1763,Static Plateau Airway Pressure
+dataset_a1764,Static Extrinsic PEEP
+dataset_a1765,Static Intrinsic PEEP
+dataset_a1929,Patient ID
+dataset_a2103,Pause Time Setting
+dataset_a2104,PEEP Setting
+dataset_a2324,Inspired Tidal Volume
+dataset_a2325,Expired Tidal Volume
+dataset_a2326,Expired Minute Volume
+dataset_a2382,Ventilator Operation Mode
+dataset_a2431,Mechanical Expired Tidal Volume
+dataset_a2432,Spontaneous Expired Tidal Volume
+dataset_a2433,Mechancial Expired Minute Volume
+dataset_a2435,Mechanical Respiratory Rate
+dataset_a2436,Spontaneous Respiratory Rate
+dataset_a2565,Plateau Airway Pressure
+dataset_a2566,Peak Pressure Upper Alarm Limit
+dataset_a2661,Respiratory Rate Lower Alarm Limit
+dataset_a2662,Respiratory Rate Upper Alarm Limit
+dataset_a2759,Support Pressure Setting
+dataset_a2776,Total PEEP
+dataset_a2782,FiO2 Setting
+dataset_a2792,Intrinsic PEEP
+dataset_a2973,Patient Disconnected
+dataset_a2986,Maximum Positive Airway Pressure
+dataset_a2987,Inspired Pressure Setting
+dataset_a2989,Expired Tidal Volume Upper Alarm Limit
+dataset_a2990,Expired Tidal Volume Lower Alarm Limit
+dataset_a3805,Respiratory Rate (CO2)
+dataset_a4004,Leakage (ventilator)
+dataset_a4390,Alarm Silence Status
+dataset_a4987,Apnea Ventilation Delay Setting
+dataset_a4993,Inspiratory Time Setting
+dataset_a4998,Ventilator Flow Setting
+dataset_a5991,Peak Pressure Upper Alarm Limit
+dataset_a6449,Inspired Minute Volume (Total)
+dataset_a6702,Inspiratory Component of I:E Ratio Setting
+dataset_a6703,Expiratory Component of I:E Ratio Setting
+dataset_a6943,Inspired O2 (Ventilator)
+dataset_a6957,Peak Airway Pressure Upper Limit
+dataset_a6958,Peak Airway Pressure Lower Limit
+dataset_a7579,PSV Rise Setting
+dataset_a8559,Patient Circuit Leak Alarm Limit
+dataset_a8563,Mechanical Respiratory Rate Setting
+dataset_a8576,Sustained Paw Alarm
+dataset_a8579,Plimit Reached Alarm
+dataset_a9293,Pressure Rise Time Setting
+dataset_a9297,Extrinsic PEEP Upper Alarm Limit
+dataset_a9298,Extrinsic PEEP Lower Alarm Limit
+dataset_a9299,Intrinsic PEEP Upper Alarm Limit
+dataset_a9301,Disconnect Time Setting
+dataset_a9309,Breathing Circuit Leak
+dataset_a9310,Breathing Circuit Compliance
+dataset_a9313,Intrinsic PEEP Volume
