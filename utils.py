@@ -46,9 +46,14 @@ def load_data(data_path, colname_path):
 
 def separate_type(df):
     # divide data into settings and measurements
-    settings = df[location_date + list(df.columns[df.columns.str.contains("Setting")])]
-    measurement = df[list(df.columns[~df.columns.str.contains("Setting")])]
+    settings = df[location_date + list(df.columns[df.columns.str.contains("Setting|Mode")])]
+    measurement = df[list(df.columns[~df.columns.str.contains("Setting|Mode")])]
     return settings, measurement
+
+
+def get_valid_measurement(measurement):
+    valid_cols = set(measurement.columns[measurement.nunique() > 1]) - set(location_date)
+    return measurement[valid_cols]
 
 
 def find_consecutive_null(df):
