@@ -56,3 +56,9 @@ def find_consecutive_null(df):
     :param df: df after mean by interval
     :return: Series where index is columns name and value is the corresponding max consecutive null
     """
+    
+def addTimeInSec (df):
+    df = df.copy(deep=True)
+    hhmmss = df['dataset_datetime'].astype(str)
+    df['time_in_sec'] = pd.to_datetime(df['dataset_datetime'].astype(int).astype(str), format="%Y%m%d%H%M%S").astype('int64')//1000000000
+    return df
