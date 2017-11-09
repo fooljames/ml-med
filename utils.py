@@ -1,6 +1,8 @@
 import pandas as pd
+import numpy as np
 
 location_date = ['dataset_location', 'dataset_datetime']
+
 
 def mean_by_interval(df, interval):
     """
@@ -9,6 +11,7 @@ def mean_by_interval(df, interval):
     :param interval: time interval
     :return: aggregated dataframe
     """
+
 
 def load_data(data_path, colname_path):
     """
@@ -27,8 +30,9 @@ def load_data(data_path, colname_path):
     selected_cols = data.columns[data.columns.isin(colnames.id)]
     data = data[location_date + list(selected_cols)]
 
-    ## drop duplicates
+    ## preprocessing
     data = data.drop_duplicates(location_date + list(selected_cols))
+    data = data[np.isfinite(data['dataset_datetime'])]
 
     ## get mapping from id to colname
     colnames.index = colnames.id
