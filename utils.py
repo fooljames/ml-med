@@ -66,3 +66,10 @@ def addTimeInSec (df):
     df['datetime'] = pd.to_datetime(df['dataset_datetime'].astype(int).astype(str), format="%Y%m%d%H%M%S")
     df['time_in_sec'] = df['datetime'].astype('int64')//1000000000
     return df
+
+
+def moving_avg(df):
+    df.index = df['dataset_datetime']
+    f = lambda x: x.rolling('1h').mean()
+    df['dataset_moving_avg'] = df.groupby('dataset_location')['dataset_a0188'].apply(f)
+    return df
