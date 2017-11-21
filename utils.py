@@ -6,8 +6,8 @@ location_date = ['dataset_location', 'dataset_datetime']
 
 def mean_by_interval(df, interval):
     df = df.copy(deep=True)
-    df['time_in_sec_interval'] = (df['time_in_sec'] // interval) * interval
-    df = df.groupby([df['time_in_sec'] // interval, df['dataset_location']]).mean()
+    df['datetime_interval'] = pd.to_datetime(df['time_in_sec'] // interval * interval, unit='s')
+    df = df.groupby(['datetime_interval', 'dataset_location']).mean().reset_index()
     return df
 
 
