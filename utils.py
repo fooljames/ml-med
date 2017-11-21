@@ -5,12 +5,9 @@ location_date = ['dataset_location', 'dataset_datetime']
 
 
 def mean_by_interval(df, interval):
-    """
-    mean ignore NULL value
-    :param df: input
-    :param interval: time interval
-    :return: aggregated dataframe
-    """
+    df = df.copy(deep=True)
+    df = df.groupby([df['time_in_sec'] // interval, df['dataset_location']]).mean()
+    return df
 
 
 def load_data(data_path, colname_path):
@@ -67,9 +64,4 @@ def addTimeInSec (df):
     hhmmss = df['dataset_datetime'].astype(str)
     df['datetime'] = pd.to_datetime(df['dataset_datetime'].astype(int).astype(str), format="%Y%m%d%H%M%S")
     df['time_in_sec'] = df['datetime'].astype('int64')//1000000000
-    return df
-
-def mean_by_interval(df, interval):
-    df = df.copy(deep=True)
-    df = df.groupby([df['time_in_sec'] // interval, df['dataset_location']]).mean()
     return df
