@@ -50,8 +50,8 @@ def separate_type(df):
 
 
 def get_valid_measurement(measurement):
-    valid_cols = set(measurement.columns[measurement.nunique() > 1]) - set(location_date)
-    return measurement[valid_cols]
+    valid_cols = set(measurement.columns[measurement.nunique() > 100]) - set(location_date)
+    return measurement[list(valid_cols)]
 
 
 def find_consecutive_null(df):
@@ -59,12 +59,12 @@ def find_consecutive_null(df):
     :param df: df after mean by interval
     :return: Series where index is columns name and value is the corresponding max consecutive null
     """
-    
-def addTimeInSec (df):
+
+
+def addTimeInSec(df):
     df = df.copy(deep=True)
-    hhmmss = df['dataset_datetime'].astype(str)
-    df['datetime'] = pd.to_datetime(df['dataset_datetime'].astype(int).astype(str), format="%Y%m%d%H%M%S")
-    df['time_in_sec'] = df['datetime'].astype('int64')//1000000000
+    df['time_in_sec'] = pd.to_datetime(df['dataset_datetime'].astype(int).astype(str), format="%Y%m%d%H%M%S").astype(
+        'int64') // 1000000000
     return df
 
 
