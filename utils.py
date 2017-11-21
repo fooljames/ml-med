@@ -65,5 +65,11 @@ def find_consecutive_null(df):
 def addTimeInSec (df):
     df = df.copy(deep=True)
     hhmmss = df['dataset_datetime'].astype(str)
-    df['time_in_sec'] = pd.to_datetime(df['dataset_datetime'].astype(int).astype(str), format="%Y%m%d%H%M%S").astype('int64')//1000000000
+    df['datetime'] = pd.to_datetime(df['dataset_datetime'].astype(int).astype(str), format="%Y%m%d%H%M%S")
+    df['time_in_sec'] = df['datetime'].astype('int64')//1000000000
+    return df
+
+def mean_by_interval(df, interval):
+    df = df.copy(deep=True)
+    df = df.groupby([df['time_in_sec'] // interval, df['dataset_location']]).mean()
     return df
