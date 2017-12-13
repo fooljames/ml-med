@@ -70,6 +70,18 @@ def addTimeInSec(df):
 
 def moving_avg(df):
     df.index = df['dataset_datetime']
+    df = df.rename(columns={'dataset_a0188': 'SpO2'})
     f = lambda x: x.rolling('1h').mean()
-    df['dataset_moving_avg'] = df.groupby('dataset_location')['dataset_a0188'].apply(f)
+    df['SpO2_moving_avg'] = df.groupby('dataset_location')['SpO2'].apply(f)
+    df['SpO2_percent_change'] = (df['SpO2'] - df['SpO2_moving_avg']) / df['SpO2_moving_avg']
+    return df
+
+def check_y(df, t='180s', n_decrease_lower_bound = 6, delta_change = -0.1):
+    df.index = df['dataset_datetime']
+    df['check'] = np.where(df['SpO2_percent_change'] <= delta_change, 1, 0)
+    f = lambda x: x.rolling(t).sum()
+    df['y_check_decrease'] = df.groupby('dataset_location')['check'].apply(f)
+    df['y_value'] = np.where((df['check'] == 1) & (df['y_check_decrease'] >= n_decrease_lower_bound), df['SpO2'], float('nan'))
+    del df['check']
+    df.index = range(len(df))
     return df
