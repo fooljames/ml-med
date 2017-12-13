@@ -82,7 +82,7 @@ def check_y(df, t='180s', n_decrease_lower_bound = 6, delta_change = -0.1):
     f = lambda x: x.rolling(t).sum()
     df['y_check_decrease'] = df.groupby('dataset_location')['check'].apply(f)
     setting_cols = [col for col in demographic.columns if 'setting' in col or 'mode' in col]
-    df['is_setting_changed'] =df[setting_cols].rolling(t).std().max().max() > 0
+    df['is_setting_changed'] =df[setting_cols].rolling('1h', center = True).std().max().max() > 0
     df['y_value'] = np.where((df['check'] == 1) & (df['y_check_decrease'] >= n_decrease_lower_bound) & df['is_setting_changed'], 1, 0)
     del df['check']
     df.index = range(len(df))
