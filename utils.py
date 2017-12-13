@@ -87,3 +87,74 @@ def check_y(df, t='180s', n_decrease_lower_bound = 6, delta_change = -0.1):
     del df['check']
     df.index = range(len(df))
     return df
+
+
+def merge_all(capsule, phlilp, first_admit, follow_up):
+    df_capsule = capsule
+    df_phlilp = phlilp
+    first_admit = first_admit
+    follow_up = follow_up
+
+    """
+    merge capsule and phlilp
+    """
+    data = pd.merge(left=df_phlilp, right=df_capsule, how='right', on=['dataset_datetime', 'dataset_location'])
+    data['Ward'] = pd.to_numeric(data['dataset_location'].str[6:7])
+    data['Bed'] = pd.to_numeric(data['dataset_location'].str[11:12])
+
+    """
+    merge first_admit and follow_up
+    """
+    first_admit['ICU_ADMIT_DATE_1'] = pd.to_datetime(first_admit['ICU_ADMIT_DATE'].astype(str), format='%m/%d/%Y',
+                                                     errors='coerce')
+    first_admit['TIMEATICU_1'] = pd.to_datetime(first_admit['TIMEATICU'].astype(str).str[0:8], format='%H:%M:%S',
+                                                errors='coerce').dt.time
+    first_admit['ICU_ADMIT_DATETIME'] = pd.to_datetime(
+        first_admit['ICU_ADMIT_DATE_1'].dt.strftime('%Y-%m-%d') + ' ' + first_admit['TIMEATICU_1'].astype(str),
+        format='%Y-%m-%d %H:%M:%S', errors='coerce') + sevenhour
+    del first_admit['ICU_ADMIT_DATE_1'], first_admit['TIMEATICU_1']
+
+    follow_up['_submission_time'] = pd.to_datetime(follow_up['_submission_time'], format='%Y-%m-%dT%H:%M:%S')
+
+    # concat first_admit andfollow_up
+    col1 = ['HN2', 'BED2', 'WARD2', 'STATUS', '_submission_time']
+    follow_up_s = pd.DataFrame(follow_up, columns=col1)
+    follow_up_s = follow_up_s.rename(
+        columns={'HN2': 'HN', 'BED2': 'Bed', 'WARD2': 'Ward', 'STATUS': 'Status', '_submission_time': 'datetime'})
+    follow_up_s['datasource'] = 'follow_up'
+
+    col2 = ['HN1', 'BED1', 'WARD1', 'GENDER', 'ICU_ADMIT_DATETIME']
+    first_admit_s = pd.DataFrame(first_admit, columns=col2)
+    first_admit_s = first_admit_s.rename(
+        columns={'HN1': 'HN', 'BED1': 'Bed', 'WARD1': 'Ward', 'GENDER': 'Gender', 'ICU_ADMIT_DATETIME': 'datetime'})
+    first_admit_s['datasource'] = 'first_admit'
+
+    form = pd.concat([follow_up_s, first_admit_s], ignore_index=True)
+
+    """
+    merge all
+    """
+    data['datetime'] = pd.to_datetime(data_s['dataset_datetime'].dt.strftime('%Y-%m-%d %H:%M'), format='%Y-%m-%d %H:%M')
+    form['datetime'] = pd.to_datetime(form['datetime'].dt.strftime('%Y-%m-%d %H:%M'), format='%Y-%m-%d %H:%M')
+
+    # join on Ward, Bed and datetime (miniute level)
+    df = pd.merge(left=data, right=form, how='left', left_on=['Ward', 'Bed', 'datetime'],
+                  right_on=['Ward', 'Bed', 'datetime'])
+    df = df.sort_values(by=['Bed', 'Ward', 'datetime'])
+
+    # for loop with each HN and get mindate, maxdate, bed and ward
+    # and then assign HN to other rows with condition: same bed, same ward, datetime in (mindate,maxdate)
+    for i, p in enumerate(df['HN'].unique()):
+        mindate = df[df['HN'] == p]['dataset_datetime'].min()
+        maxdate = df[df['HN'] == p]['dataset_datetime'].max()
+        Bed = df[df['HN'] == p]['Bed'].min()
+        Ward = df[df['HN'] == p]['Ward'].min()
+        Gender = df[df['HN'] == p]['Gender'].min()
+
+        df['HN'] = np.where(((df['dataset_datetime'] >= mindate) & (df['dataset_datetime'] <= maxdate) & (
+        df['Bed'] == Bed) & (df['Ward'] == Ward)), p, df['HN'])
+        df['Gender'] = np.where(((df['dataset_datetime'] >= mindate) & (df['dataset_datetime'] <= maxdate) & (
+        df['Bed'] == Bed) & (df['Ward'] == Ward)), Gender, df['Gender'])
+
+    del df['datetime']
+    return df
