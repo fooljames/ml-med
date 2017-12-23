@@ -4,13 +4,6 @@ import numpy as np
 location_date = ['dataset_location', 'dataset_datetime']
 
 
-def mean_by_interval(df, interval):
-    df = df.copy(deep=True)
-    df['datetime_interval'] = pd.to_datetime(df['time_in_sec'] // interval * interval, unit='s')
-    df = df.groupby(['datetime_interval', 'dataset_location']).mean().reset_index()
-    return df
-
-
 def load_data(data_path, colname_path):
     """
     change column's name to a be readable one
@@ -22,7 +15,7 @@ def load_data(data_path, colname_path):
     """
     ## load data and colnames files
     data = pd.read_csv(data_path)
-    colnames = pd.read_csv(colname_path)
+    colnames = pd.read_csv(colname_path, low_memory=False)
 
     ## get only relevant columns
     selected_cols = data.columns[data.columns.isin(colnames.id)]
@@ -54,107 +47,91 @@ def get_valid_measurement(measurement):
     return measurement[list(valid_cols)]
 
 
-def find_consecutive_null(df):
-    """
-    :param df: df after mean by interval
-    :return: Series where index is columns name and value is the corresponding max consecutive null
-    """
-
-
 def addTimeInSec(df):
     df = df.copy(deep=True)
-    df['time_in_sec'] = pd.to_datetime(df['dataset_datetime'].astype(int).astype(str), format="%Y%m%d%H%M%S").astype(
+    df['time_in_sec'] = pd.to_datetime(df['dataset_datetime'].astype(str), format="%Y%m%d%H%M%S").astype(
         'int64') // 1000000000
     return df
 
 
-def moving_avg(df):
-    df.index = df['dataset_datetime']
-    df = df.rename(columns={'dataset_a0188': 'SpO2'})
-    f = lambda x: x.rolling('1h').mean()
-    df['SpO2_moving_avg'] = df.groupby('dataset_location')['SpO2'].apply(f)
-    df['SpO2_percent_change'] = (df['SpO2'] - df['SpO2_moving_avg']) / df['SpO2_moving_avg']
+def mean_by_interval(df, interval = 10):
+    df = df.copy(deep=True)
+    df['datetime_interval'] = pd.to_datetime(df['time_in_sec'] // interval * interval, unit='s')
+    df = df.groupby(['datetime_interval', 'dataset_location']).mean().reset_index()
     return df
 
-def check_y(df, t='180s', n_decrease_lower_bound = 6, delta_change = -0.1):
+
+def moving_avg(df, t = '600s'):
+    df.index = df['dataset_datetime']
+    rolling_mean = df.groupby('dataset_location')['SpO2'].rolling(t).mean().reset_index()
+    rolling_mean.rename(columns={'SpO2': 'SpO2_moving_avg'}, inplace=True)
+    df = pd.merge(df, rolling_mean, on=['dataset_location', 'dataset_datetime'])
+    # df['SpO2_moving_avg'] = df.groupby('dataset_location')['SpO2'].rolling('600s').mean().reset_index(0,drop=True)
+    df['SpO2_percent_change'] = (df['SpO2'] - df['SpO2_moving_avg']) / df['SpO2_moving_avg']
+    df.index = range(len(df))
+
+
+def check_y(df, t='180s', n_decrease_lower_bound=6, delta_change=-0.1):
+    df.sort_values(by=['dataset_location', 'dataset_datetime'], inplace=True)
     df.index = df['dataset_datetime']
     df['check'] = np.where(df['SpO2_percent_change'] <= delta_change, 1, 0)
     f = lambda x: x.rolling(t).sum()
     df['y_check_decrease'] = df.groupby('dataset_location')['check'].apply(f)
-    setting_cols = [col for col in demographic.columns if 'setting' in col or 'mode' in col]
-    df['is_setting_changed'] =df[setting_cols].rolling('1h', center = True).std().max().max() > 0
-    df['y_value'] = np.where((df['check'] == 1) & (df['y_check_decrease'] >= n_decrease_lower_bound) & df['is_setting_changed'], 1, 0)
+
+    # df.columns.str.lower()
+    # setting_cols = [col for col in df.columns if 'setting' in col or 'mode' in col]
+    # df['is_setting_changed'] = df[setting_cols].rolling('3600s', center = True).std().max().max() > 0
+    df['y_value'] = np.where(df['SpO2'].isnull() == True, 'NA', 0)
+    df['y_value'] = np.where((df['check'] == 1) & (df['y_check_decrease'] >= n_decrease_lower_bound), 1,
+                             df['y_value'])  # & (df['is_setting_changed'])
     del df['check']
     df.index = range(len(df))
     return df
 
 
-def merge_all(capsule, phlilp, first_admit, follow_up):
-    df_capsule = capsule
-    df_phlilp = phlilp
-    first_admit = first_admit
-    follow_up = follow_up
+def create_features(df, t_moving='180s', t_before='600s', n_before=6):
+    data = df.copy()
+    cols = ['Respiratory Rate', 'Mean Airway Pressure', 'Inspired Tidal Volume', 'SpO2']
 
-    """
-    merge capsule and phlilp
-    """
-    data = pd.merge(left=df_phlilp, right=df_capsule, how='right', on=['dataset_datetime', 'dataset_location'])
-    data['Ward'] = pd.to_numeric(data['dataset_location'].str[6:7])
-    data['Bed'] = pd.to_numeric(data['dataset_location'].str[11:12])
+    # Moving Average ############################################################################################
+    data.sort_values(by=['dataset_location', 'dataset_datetime'], inplace=True)
+    data.index = data['dataset_datetime']
+    mean = data.groupby('dataset_location')[cols].rolling(t_moving).mean().reset_index()
+    # mean.rename(columns = {col: '{}_{}'.format(col, 'moving_mean_avg') for col in (cols)}, inplace = True)
+    sd = data.groupby('dataset_location')[cols].rolling(t_moving).std().reset_index()
+    # sd.rename(columns = {col: '{}_{}'.format(col, 'moving_sd_avg') for col in (cols)}, inplace = True)
 
-    """
-    merge first_admit and follow_up
-    """
-    first_admit['ICU_ADMIT_DATE_1'] = pd.to_datetime(first_admit['ICU_ADMIT_DATE'].astype(str), format='%m/%d/%Y',
-                                                     errors='coerce')
-    first_admit['TIMEATICU_1'] = pd.to_datetime(first_admit['TIMEATICU'].astype(str).str[0:8], format='%H:%M:%S',
-                                                errors='coerce').dt.time
-    first_admit['ICU_ADMIT_DATETIME'] = pd.to_datetime(
-        first_admit['ICU_ADMIT_DATE_1'].dt.strftime('%Y-%m-%d') + ' ' + first_admit['TIMEATICU_1'].astype(str),
-        format='%Y-%m-%d %H:%M:%S', errors='coerce') + sevenhour
-    del first_admit['ICU_ADMIT_DATE_1'], first_admit['TIMEATICU_1']
+    for i, col in enumerate(cols):
+        colname = col + "_moving_mean_avg"
+        data[colname] = mean[col]
+        colname = col + "_moving_sd_avg"
+        data[colname] = sd[col]
 
-    follow_up['_submission_time'] = pd.to_datetime(follow_up['_submission_time'], format='%Y-%m-%dT%H:%M:%S')
+    # Average Before ###########################################################################################
+    from datetime import timedelta
+    mean_bf = data.groupby(['dataset_location'])[cols].rolling(t_before).mean().reset_index()
+    sd_bf = data.groupby(['dataset_location'])[cols].rolling(t_before).std().reset_index()
 
-    # concat first_admit andfollow_up
-    col1 = ['HN2', 'BED2', 'WARD2', 'STATUS', '_submission_time']
-    follow_up_s = pd.DataFrame(follow_up, columns=col1)
-    follow_up_s = follow_up_s.rename(
-        columns={'HN2': 'HN', 'BED2': 'Bed', 'WARD2': 'Ward', 'STATUS': 'Status', '_submission_time': 'datetime'})
-    follow_up_s['datasource'] = 'follow_up'
+    time_delta = []
+    for i in range(1, n_before + 1):
+        time_delta.append(int(t_before[0:3]) * i)
 
-    col2 = ['HN1', 'BED1', 'WARD1', 'GENDER', 'ICU_ADMIT_DATETIME']
-    first_admit_s = pd.DataFrame(first_admit, columns=col2)
-    first_admit_s = first_admit_s.rename(
-        columns={'HN1': 'HN', 'BED1': 'Bed', 'WARD1': 'Ward', 'GENDER': 'Gender', 'ICU_ADMIT_DATETIME': 'datetime'})
-    first_admit_s['datasource'] = 'first_admit'
+    for i, s in enumerate(time_delta):
+        col_name = 'datetime_' + str(s) + "s_bf"
+        data[col_name] = data['dataset_datetime'] - timedelta(seconds=s)
 
-    form = pd.concat([follow_up_s, first_admit_s], ignore_index=True)
+        mean_df = mean_bf.copy()
+        mean_df = mean_df.rename(columns={'dataset_datetime': col_name})
+        mean_df.rename(columns={col: '{}_{}'.format(col, 'mean' + str(s) + 's') for col in (cols)}, inplace=True)
+        data = pd.merge(left=data, right=mean_df, how='left', left_on=[col_name, 'dataset_location'],
+                        right_on=[col_name, 'dataset_location'])
 
-    """
-    merge all
-    """
-    data['datetime'] = pd.to_datetime(data_s['dataset_datetime'].dt.strftime('%Y-%m-%d %H:%M'), format='%Y-%m-%d %H:%M')
-    form['datetime'] = pd.to_datetime(form['datetime'].dt.strftime('%Y-%m-%d %H:%M'), format='%Y-%m-%d %H:%M')
+        std_df = sd_bf.copy()
+        std_df = std_df.rename(columns={'dataset_datetime': col_name})
+        std_df.rename(columns={col: '{}_{}'.format(col, 'std' + str(s) + 's') for col in (cols)}, inplace=True)
+        data = pd.merge(left=data, right=std_df, how='left', left_on=[col_name, 'dataset_location'],
+                        right_on=[col_name, 'dataset_location'])
 
-    # join on Ward, Bed and datetime (miniute level)
-    df = pd.merge(left=data, right=form, how='left', left_on=['Ward', 'Bed', 'datetime'],
-                  right_on=['Ward', 'Bed', 'datetime'])
-    df = df.sort_values(by=['Bed', 'Ward', 'datetime'])
+    data.index = range(len(data))
+    return data
 
-    # for loop with each HN and get mindate, maxdate, bed and ward
-    # and then assign HN to other rows with condition: same bed, same ward, datetime in (mindate,maxdate)
-    for i, p in enumerate(df['HN'].unique()):
-        mindate = df[df['HN'] == p]['dataset_datetime'].min()
-        maxdate = df[df['HN'] == p]['dataset_datetime'].max()
-        Bed = df[df['HN'] == p]['Bed'].min()
-        Ward = df[df['HN'] == p]['Ward'].min()
-        Gender = df[df['HN'] == p]['Gender'].min()
-
-        df['HN'] = np.where(((df['dataset_datetime'] >= mindate) & (df['dataset_datetime'] <= maxdate) & (
-        df['Bed'] == Bed) & (df['Ward'] == Ward)), p, df['HN'])
-        df['Gender'] = np.where(((df['dataset_datetime'] >= mindate) & (df['dataset_datetime'] <= maxdate) & (
-        df['Bed'] == Bed) & (df['Ward'] == Ward)), Gender, df['Gender'])
-
-    del df['datetime']
-    return df
