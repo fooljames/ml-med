@@ -71,6 +71,56 @@ def moving_avg(df, t = '600s'):
     df.index = range(len(df))
 
 
+def merge_file(phlilps_path, capsule_path, output_path):
+    phlilps_list = glob.glob(phlilps_path + "/phlilps*.csv")
+    capsule_list = glob.glob(capsule_path + "/capsule*.csv")
+    output_list = glob.glob(output_path + "/output*.csv")
+    output_file = [x[46:54] for x in output_list]
+
+    for i, p in enumerate(phlilps_list):
+        date_file = p[47:55]
+        if date_file in output_file:
+            print('output_%s already existed' % date_file)
+
+        else:
+            for j, c in enumerate(capsule_list):
+                if date_file == c[48:56]:
+                    phlilps = load_data(p, phlilps_path + '/column_id_name_p.csv')
+                    # phlilps = mean_interval(phlilps)
+                    phlilps = addTimeInSec(phlilps)
+                    phlilps = mean_by_interval(phlilps, 10)
+                    ##phlilps = y_moving_avg(phlilps)
+                    del phlilps['diff_time']
+
+                    capsules = load_data(c, capsule_path + '/column_id_name_c.csv')
+                    capsules = addTimeInSec(capsules)
+                    capsules = mean_by_interval(capsules, 10)
+
+                    df = pd.merge(left=capsules, right=phlilps, how='inner',
+                                  on=['dataset_datetime', 'dataset_location'])
+                    # df.to_hdf(output_path + '/output_' + date_file + '.h5', index = False, key = 'output')
+                    df.to_csv(output_path + '/output_' + date_file + '.csv', index=False)
+                    print("already saved file %s" % date_file)
+
+
+def load_data_output(datapath):
+    # file_list = glob.glob(datapath + "/output*.h5")
+    file_list = glob.glob(datapath + "/output*.csv")
+    data = pd.DataFrame()
+    list_ = []
+    for file_ in file_list:
+        if file_ == file_list[0]:
+            df = pd.read_csv(file_, low_memory=False, index_col=None)
+        else:
+            df = pd.read_csv(file_, low_memory=False, index_col=None, header=0)
+        data = data.append(df)
+        print("Loaded file %s with rows: %d " % (file_, len(df)))
+
+    data.index = range(len(data))
+    data = data.drop_duplicates()
+    data['dataset_datetime'] = pd.to_datetime(data['dataset_datetime'], format='%Y-%m-%d %H:%M:%S', )
+    return data
+
 def check_y(df, t='180s', n_decrease_lower_bound=6, delta_change=-0.1):
     df.sort_values(by=['dataset_location', 'dataset_datetime'], inplace=True)
     df.index = df['dataset_datetime']
@@ -134,4 +184,26 @@ def create_features(df, t_moving='180s', t_before='600s', n_before=6):
 
     data.index = range(len(data))
     return data
+
+
+def patient(df):
+    df.sort_values(by = ['dataset_location', 'dataset_datetime'], inplace = True)
+    df_test = df.copy()
+    df_test['HN'] = float('nan')
+    for i, x in enumerate(file.HN.unique()):
+        location = file[(file.HN == x) & (file.dataset_location != 'n/a')]['dataset_location'].unique()
+        print( 'patient id: %s' %(x))
+
+        for j, y in enumerate(location):
+            mindate = file[(file.HN == x) & (file.dataset_location == y) ]['datetime'].min()
+            maxdate = file[(file.HN == x) & (file.dataset_location == y)]['datetime'].max()
+
+            df_test['HN'] = np.where(((df_test['dataset_datetime'] >= mindate) &
+                                     (df_test['dataset_datetime'] <= maxdate) &
+                                     (df_test['dataset_location'] == y))
+                                     , x, df_test['HN'])
+
+            print('location: %s since %s to %s' %(y, mindate, maxdate))
+        print('-------------------------------------------------------------------------------------------------')
+    return df_test
 
