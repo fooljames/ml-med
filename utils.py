@@ -71,6 +71,7 @@ def moving_avg(df, t = '600s'):
     df.index = range(len(df))
 
 
+# merge capsule and phlilp file ato be output file
 def merge_file(phlilps_path, capsule_path, output_path):
     phlilps_list = glob.glob(phlilps_path + "/phlilps*.csv")
     capsule_list = glob.glob(capsule_path + "/capsule*.csv")
@@ -121,6 +122,8 @@ def load_data_output(datapath):
     data['dataset_datetime'] = pd.to_datetime(data['dataset_datetime'], format='%Y-%m-%d %H:%M:%S', )
     return data
 
+
+# check y
 def check_y(df, t='180s', n_decrease_lower_bound=6, delta_change=-0.1):
     df.sort_values(by=['dataset_location', 'dataset_datetime'], inplace=True)
     df.index = df['dataset_datetime']
@@ -139,6 +142,7 @@ def check_y(df, t='180s', n_decrease_lower_bound=6, delta_change=-0.1):
     return df
 
 
+# create features
 def create_features(df, t_moving='180s', t_before='600s', n_before=6):
     data = df.copy()
     cols = ['Respiratory Rate', 'Mean Airway Pressure', 'Inspired Tidal Volume', 'SpO2']
@@ -186,24 +190,76 @@ def create_features(df, t_moving='180s', t_before='600s', n_before=6):
     return data
 
 
-def patient(df):
-    df.sort_values(by = ['dataset_location', 'dataset_datetime'], inplace = True)
+def remove_non_ascii(s):
+    return "".join(i for i in s if (ord(i) < 128) & (ord(i) > 47))
+
+
+# load first admit and follow up
+def first_follow(path_first, path_follow):
+    first_admit = pd.read_csv(path_first, low_memory=False, index_col=None, encoding='iso-8859-1')
+    from datetime import timedelta
+    sevenhour = timedelta(seconds=25200)
+    first_admit['ICU_ADMIT_DATE_1'] = pd.to_datetime(first_admit['ICU_ADMIT_DATE'].astype(str), format='%Y-%m-%d',
+                                                     errors='coerce')
+    first_admit['TIMEATICU_1'] = pd.to_datetime(first_admit['TIMEATICU'].astype(str).str[0:8], format='%H:%M:%S',
+                                                errors='coerce').dt.time
+    first_admit['ICU_ADMIT_DATETIME'] = pd.to_datetime(
+        first_admit['ICU_ADMIT_DATE_1'].dt.strftime('%Y-%m-%d') + ' ' + first_admit['TIMEATICU_1'].astype(str),
+        format='%Y-%m-%d %H:%M:%S', errors='coerce') + sevenhour
+    # del first_admit['ICU_ADMIT_DATE_1'], first_admit['TIMEATICU_1']
+
+    follow_up = pd.read_csv(path_follow, low_memory=False, index_col=None, encoding='iso-8859-1')
+    follow_up['_submission_time'] = pd.to_datetime(follow_up['_submission_time'], format='%Y-%m-%dT%H:%M:%S')
+
+    col1 = ['HN2', 'BED2', 'WARD2', '_submission_time']
+    follow_up_s = pd.DataFrame(follow_up, columns=col1)
+    follow_up_s = follow_up_s.rename(
+        columns={'HN2': 'HN', 'BED2': 'Bed', 'WARD2': 'Ward', 'STATUS': 'Status', '_submission_time': 'datetime'})
+    follow_up_s['datasource'] = 'follow_up'
+
+    col2 = ['HN1', 'BED1', 'WARD1', 'ICU_ADMIT_DATETIME']
+    first_admit_s = pd.DataFrame(first_admit, columns=col2)
+    first_admit_s = first_admit_s.rename(
+        columns={'HN1': 'HN', 'BED1': 'Bed', 'WARD1': 'Ward', 'GENDER': 'Gender', 'ICU_ADMIT_DATETIME': 'datetime'})
+    first_admit_s['datasource'] = 'first_admit'
+
+    form = pd.concat([follow_up_s, first_admit_s], ignore_index=True)
+    form['datetime'] = pd.to_datetime(form['datetime'].dt.strftime('%Y-%m-%d %H:%M'), format='%Y-%m-%d %H:%M')
+    form['dataset_location'] = 'MICU2-' + form['Ward'].astype(str) + 'FL-B' + form['Bed'].astype(str)
+    form['dataset_location'] = np.where((form['Ward'] == 'n/a') | (form['Bed'] == 'n/a'), 'n/a',
+                                        form['dataset_location'].str.strip())
+
+    ### Clean HN Data
+    form['HN'] = form.HN.str.lower()
+    form['HN'] = form.HN.apply(remove_non_ascii)
+    form['Bed'] = form.Bed.astype(str).str.replace("'", '')
+    form['Ward'] = form.Ward.astype(str).str.replace("'", '')
+
+    return form
+
+
+# define patient
+def patient(df, first_admit_path, follow_up_path):
+    file = first_follow(first_admit_path, follow_up_path)
+    df.sort_values(by=['dataset_location', 'dataset_datetime'], inplace=True)
     df_test = df.copy()
+
     df_test['HN'] = float('nan')
     for i, x in enumerate(file.HN.unique()):
         location = file[(file.HN == x) & (file.dataset_location != 'n/a')]['dataset_location'].unique()
-        print( 'patient id: %s' %(x))
+
+        print('patient id: %s' % (x))
 
         for j, y in enumerate(location):
-            mindate = file[(file.HN == x) & (file.dataset_location == y) ]['datetime'].min()
+            mindate = file[(file.HN == x) & (file.dataset_location == y)]['datetime'].min()
             maxdate = file[(file.HN == x) & (file.dataset_location == y)]['datetime'].max()
 
             df_test['HN'] = np.where(((df_test['dataset_datetime'] >= mindate) &
-                                     (df_test['dataset_datetime'] <= maxdate) &
-                                     (df_test['dataset_location'] == y))
+                                      (df_test['dataset_datetime'] <= maxdate) &
+                                      (df_test['dataset_location'] == y))
                                      , x, df_test['HN'])
 
-            print('location: %s since %s to %s' %(y, mindate, maxdate))
+            print('location: %s since %s to %s' % (y, mindate, maxdate))
         print('-------------------------------------------------------------------------------------------------')
     return df_test
 
