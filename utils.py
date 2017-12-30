@@ -92,6 +92,14 @@ def merge_file(phlilps_path, capsule_path, output_path):
                     phlilps = mean_by_interval(phlilps, 10)
                     phlilps = moving_avg(phlilps)
 
+                    if int(date_file) < 20171124:
+                        phlilps['ward'] = np.where(phlilps['dataset_location'].str[3:4] == '1', '7', '6')
+                        phlilps['dataset_location1'] = phlilps['dataset_location']
+                        phlilps['dataset_location'] = 'M' + phlilps['dataset_location1'].str[:4] + '-' + phlilps[
+                            'ward'] + 'FL-B' + phlilps['dataset_location1'].str[5:6]
+                        del phlilps['ward']
+                        del phlilps['dataset_location1']
+
                     capsules = load_data(c, capsule_path + '/column_id_name_c.csv')
                     capsules = addTimeInSec(capsules)
                     capsules = mean_by_interval(capsules, 10)
@@ -211,8 +219,6 @@ def first_follow(path_first, path_follow):
     first_admit['HOSPITAL_ADMIT_DATE_DATETIME'] = pd.to_datetime(
         first_admit['HOSPITAL_ADMIT_DATE_1'].dt.strftime('%Y-%m-%d') + ' ' + first_admit['TIMEATICU_1'].astype(str),
         format='%Y-%m-%d %H:%M:%S', errors='coerce') + sevenhour
-
-    # if form = 2 or 3, use hospital admit date
     first_admit['datetime'] = np.where(first_admit['ADMITFROM'] == 1, first_admit['ICU_ADMIT_DATETIME'],
                                        first_admit['HOSPITAL_ADMIT_DATE_DATETIME'])
 
@@ -233,9 +239,14 @@ def first_follow(path_first, path_follow):
 
     form = pd.concat([follow_up_s, first_admit_s], ignore_index=True)
     form['datetime'] = pd.to_datetime(form['datetime'].dt.strftime('%Y-%m-%d %H:%M'), format='%Y-%m-%d %H:%M')
-    form['dataset_location'] = 'MICU2-' + form['Ward'].astype(str) + 'FL-B' + form['Bed'].astype(str)
+    form['dataset_location1'] = 'MICU1-' + form['Ward'].astype(str) + 'FL-B' + form['Bed'].astype(str)
+    form['dataset_location2'] = 'MICU2-' + form['Ward'].astype(str) + 'FL-B' + form['Bed'].astype(str)
+    form['dataset_location'] = np.where((form['Ward'].astype(str) == '7'), form['dataset_location1'].str.strip(),
+                                        form['dataset_location2'].str.strip())
     form['dataset_location'] = np.where((form['Ward'] == 'n/a') | (form['Bed'] == 'n/a'), 'n/a',
                                         form['dataset_location'].str.strip())
+    del form['dataset_location1']
+    del form['dataset_location2']
 
     ### Clean HN Data
     form['HN'] = form.HN.str.lower()
@@ -243,6 +254,7 @@ def first_follow(path_first, path_follow):
     form['Bed'] = form.Bed.astype(str).str.replace("'", '')
     form['Ward'] = form.Ward.astype(str).str.replace("'", '')
 
+    print('already concated first admit and follow up')
     return form
 
 
