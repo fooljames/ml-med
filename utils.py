@@ -69,7 +69,7 @@ def moving_avg(df, t = '600s'):
     # df['SpO2_moving_avg'] = df.groupby('dataset_location')['SpO2'].rolling('600s').mean().reset_index(0,drop=True)
     df['SpO2_percent_change'] = (df['SpO2'] - df['SpO2_moving_avg']) / df['SpO2_moving_avg']
     df.index = range(len(df))
-
+    return df
 
 # merge capsule and phlilp file ato be output file
 def merge_file(phlilps_path, capsule_path, output_path):
@@ -141,6 +141,23 @@ def check_y(df, t='180s', n_decrease_lower_bound=6, delta_change=-0.1):
     df.index = range(len(df))
     return df
 
+# check y backward
+def check_y_backward(df, t='180s', n_decrease_lower_bound=6, delta_change=-0.1):
+    df.sort_values(by=['dataset_location', 'dataset_datetime'], inplace=True)
+    df.index = df['dataset_datetime']
+    df['check'] = np.where((~df['SpO2_percent_change'].shift[rows_shifted].isnull()) & (df['SpO2_percent_change'].shift[rows_shifted] <= delta_change) & (df['time_diff'] <= time_diff_allowed), 1, 0)
+    f = lambda x: x.rolling(t).sum()
+    df['y_check_decrease'] = df.groupby('dataset_location')['check'].apply(f)
+
+    # df.columns.str.lower()
+    # setting_cols = [col for col in df.columns if 'setting' in col or 'mode' in col]
+    # df['is_setting_changed'] = df[setting_cols].rolling('3600s', center = True).std().max().max() > 0
+    df['y_value'] = np.where(df['SpO2'].isnull() == True, 'NA', 0)
+    df['y_value'] = np.where((df['check'] == 1) & (df['y_check_decrease'] >= n_decrease_lower_bound), 1,
+                             df['y_value'])  # & (df['is_setting_changed'])
+    del df['check']
+    df.index = range(len(df))
+    return df
 
 # create features
 def create_features(df, t_moving='180s', t_before='600s', n_before=6):
