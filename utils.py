@@ -132,21 +132,37 @@ def load_data_output(datapath):
 
 
 # check y
-def check_y(df, t='180s', n_decrease_lower_bound=6, delta_change=-0.1):
-    df.sort_values(by=['dataset_location', 'dataset_datetime'], inplace=True)
+def check_y(df, t = '180s', n_decrease_lower_bound = 0.8, delta_change = -3.0):
+    df.sort_values(by = ['dataset_location','dataset_datetime'], inplace = True)
     df.index = df['dataset_datetime']
-    df['check'] = np.where(df['SpO2_percent_change'] <= delta_change, 1, 0)
-    f = lambda x: x.rolling(t).sum()
-    df['y_check_decrease'] = df.groupby('dataset_location')['check'].apply(f)
+    df['check'] = np.where(df['SpO2_change'] <= delta_change, 1, 0)
+    
+    summ = lambda x: x.rolling(t).sum()
+    count = lambda x: x.rolling(t).count()
+    df['data_count'] = df.groupby('dataset_location')['check'].apply(summ)
+    df['y_check_decrease'] = df.groupby('dataset_location')['check'].apply(count) / df['data_count']
+    
+    #df.columns.str.lower()
+    #setting_cols = [col for col in df.columns if 'setting' in col or 'mode' in col]
+    #df['is_setting_changed'] = df[setting_cols].rolling('3600s', center = True).std().max().max() > 0
+    df['y_value'] = np.where(df['SpO2'].isnull() == True, 0, 0)
+    df['y_value'] = np.where((df['check'] == 1) & (df['y_check_decrease'] >= n_decrease_lower_bound) & (df['data_count'] > int(t[:3])/20) , 1, df['y_value']) #& (df['is_setting_changed'])
 
-    # df.columns.str.lower()
-    # setting_cols = [col for col in df.columns if 'setting' in col or 'mode' in col]
-    # df['is_setting_changed'] = df[setting_cols].rolling('3600s', center = True).std().max().max() > 0
-    df['y_value'] = np.where(df['SpO2'].isnull() == True, 'NA', 0)
-    df['y_value'] = np.where((df['check'] == 1) & (df['y_check_decrease'] >= n_decrease_lower_bound), 1,
-                             df['y_value'])  # & (df['is_setting_changed'])
-    del df['check']
+    df['sum_y_value'] = df.groupby('dataset_location')['y_value'].apply(summ)
+    df['y_value'] = np.where((df['y_value'] == 1) & (df['sum_y_value'] == 1), 1, 0)
+    #     del df['check']
+    sum5 = lambda x: x.rolling('300s').sum()
+    sum10 = lambda x: x.rolling('600s').sum()
+    df['data_y_5m'] = df.groupby('dataset_location')['y_value'].apply(sum5)
+    df['data_y_10m'] = df.groupby('dataset_location')['y_value'].apply(sum10)
+    df['y_diff'] = df['data_y_10m'] - df['data_y_5m']
+    df['y_flag'] = np.where(df['y_diff'] > 0, 1,0)
+
+    del df['data_y_5m']
+    del df['data_y_10m']
+    del df['y_diff']
     df.index = range(len(df))
+    
     return df
 
 # check y backward
