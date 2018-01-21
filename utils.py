@@ -56,8 +56,8 @@ def addTimeInSec(df):
 
 def mean_by_interval(df, interval = 10):
     df = df.copy(deep=True)
-    df['datetime_interval'] = pd.to_datetime(df['time_in_sec'] // interval * interval, unit='s')
-    df = df.groupby(['datetime_interval', 'dataset_location']).mean().reset_index()
+    df['dataset_datetime'] = pd.to_datetime(df['time_in_sec'] // interval * interval, unit='s')
+    df = df.groupby(['dataset_datetime', 'dataset_location']).mean().reset_index()
     return df
 
 
@@ -79,23 +79,30 @@ def merge_file(phlilps_path, capsule_path, output_path):
     output_file = [x[46:54] for x in output_list]
 
     for i, p in enumerate(phlilps_list):
-        date_file = p[47:55]
+        date_file = p.split('-')[1][:8]
         if date_file in output_file:
             print('output_%s already existed' % date_file)
 
         else:
             for j, c in enumerate(capsule_list):
-                if date_file == c[48:56]:
+                if date_file == c.split('-')[1][:8]:
                     phlilps = load_data(p, phlilps_path + '/column_id_name_p.csv')
-                    # phlilps = mean_interval(phlilps)
                     phlilps = addTimeInSec(phlilps)
                     phlilps = mean_by_interval(phlilps, 10)
-                    ##phlilps = y_moving_avg(phlilps)
-                    del phlilps['diff_time']
+                    phlilps = moving_avg(phlilps)
+
+                    if int(date_file) < 20171124:
+                        phlilps['ward'] = np.where(phlilps['dataset_location'].str[3:4] == '1', '7', '6')
+                        phlilps['dataset_location1'] = phlilps['dataset_location']
+                        phlilps['dataset_location'] = 'M' + phlilps['dataset_location1'].str[:4] + '-' + phlilps[
+                            'ward'] + 'FL-B' + phlilps['dataset_location1'].str[5:6]
+                        del phlilps['ward']
+                        del phlilps['dataset_location1']
 
                     capsules = load_data(c, capsule_path + '/column_id_name_c.csv')
                     capsules = addTimeInSec(capsules)
                     capsules = mean_by_interval(capsules, 10)
+                    del capsules['time_in_sec']
 
                     df = pd.merge(left=capsules, right=phlilps, how='inner',
                                   on=['dataset_datetime', 'dataset_location'])
@@ -218,12 +225,18 @@ def first_follow(path_first, path_follow):
     sevenhour = timedelta(seconds=25200)
     first_admit['ICU_ADMIT_DATE_1'] = pd.to_datetime(first_admit['ICU_ADMIT_DATE'].astype(str), format='%Y-%m-%d',
                                                      errors='coerce')
+    first_admit['HOSPITAL_ADMIT_DATE_1'] = pd.to_datetime(first_admit['HOSPITAL_ADMIT_DATE'].astype(str),
+                                                          format='%Y-%m-%d', errors='coerce')
     first_admit['TIMEATICU_1'] = pd.to_datetime(first_admit['TIMEATICU'].astype(str).str[0:8], format='%H:%M:%S',
                                                 errors='coerce').dt.time
     first_admit['ICU_ADMIT_DATETIME'] = pd.to_datetime(
         first_admit['ICU_ADMIT_DATE_1'].dt.strftime('%Y-%m-%d') + ' ' + first_admit['TIMEATICU_1'].astype(str),
         format='%Y-%m-%d %H:%M:%S', errors='coerce') + sevenhour
-    # del first_admit['ICU_ADMIT_DATE_1'], first_admit['TIMEATICU_1']
+    first_admit['HOSPITAL_ADMIT_DATE_DATETIME'] = pd.to_datetime(
+        first_admit['HOSPITAL_ADMIT_DATE_1'].dt.strftime('%Y-%m-%d') + ' ' + first_admit['TIMEATICU_1'].astype(str),
+        format='%Y-%m-%d %H:%M:%S', errors='coerce') + sevenhour
+    first_admit['datetime'] = np.where(first_admit['ADMITFROM'] == 1, first_admit['ICU_ADMIT_DATETIME'],
+                                       first_admit['HOSPITAL_ADMIT_DATE_DATETIME'])
 
     follow_up = pd.read_csv(path_follow, low_memory=False, index_col=None, encoding='iso-8859-1')
     follow_up['_submission_time'] = pd.to_datetime(follow_up['_submission_time'], format='%Y-%m-%dT%H:%M:%S')
@@ -234,7 +247,7 @@ def first_follow(path_first, path_follow):
         columns={'HN2': 'HN', 'BED2': 'Bed', 'WARD2': 'Ward', 'STATUS': 'Status', '_submission_time': 'datetime'})
     follow_up_s['datasource'] = 'follow_up'
 
-    col2 = ['HN1', 'BED1', 'WARD1', 'ICU_ADMIT_DATETIME']
+    col2 = ['HN1', 'BED1', 'WARD1', 'datetime']
     first_admit_s = pd.DataFrame(first_admit, columns=col2)
     first_admit_s = first_admit_s.rename(
         columns={'HN1': 'HN', 'BED1': 'Bed', 'WARD1': 'Ward', 'GENDER': 'Gender', 'ICU_ADMIT_DATETIME': 'datetime'})
@@ -242,9 +255,14 @@ def first_follow(path_first, path_follow):
 
     form = pd.concat([follow_up_s, first_admit_s], ignore_index=True)
     form['datetime'] = pd.to_datetime(form['datetime'].dt.strftime('%Y-%m-%d %H:%M'), format='%Y-%m-%d %H:%M')
-    form['dataset_location'] = 'MICU2-' + form['Ward'].astype(str) + 'FL-B' + form['Bed'].astype(str)
+    form['dataset_location1'] = 'MICU1-' + form['Ward'].astype(str) + 'FL-B' + form['Bed'].astype(str)
+    form['dataset_location2'] = 'MICU2-' + form['Ward'].astype(str) + 'FL-B' + form['Bed'].astype(str)
+    form['dataset_location'] = np.where((form['Ward'].astype(str) == '7'), form['dataset_location1'].str.strip(),
+                                        form['dataset_location2'].str.strip())
     form['dataset_location'] = np.where((form['Ward'] == 'n/a') | (form['Bed'] == 'n/a'), 'n/a',
                                         form['dataset_location'].str.strip())
+    del form['dataset_location1']
+    del form['dataset_location2']
 
     ### Clean HN Data
     form['HN'] = form.HN.str.lower()
@@ -252,6 +270,7 @@ def first_follow(path_first, path_follow):
     form['Bed'] = form.Bed.astype(str).str.replace("'", '')
     form['Ward'] = form.Ward.astype(str).str.replace("'", '')
 
+    print('already concated first admit and follow up')
     return form
 
 
