@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import glob
 
 location_date = ['dataset_location', 'dataset_datetime']
 
@@ -132,56 +133,73 @@ def load_data_output(datapath):
 
 
 # check y
-def check_y(df, t='180s', n_decrease_lower_bound=6, delta_change=-0.1):
+def check_y(df, t='180s', n_decrease_lower_bound=0.8, delta_change=-3.0):
+    df['SpO2_change'] = df['SpO2'] - df['SpO2_moving_avg']
     df.sort_values(by=['dataset_location', 'dataset_datetime'], inplace=True)
     df.index = df['dataset_datetime']
-    df['check'] = np.where(df['SpO2_percent_change'] <= delta_change, 1, 0)
-    f = lambda x: x.rolling(t).sum()
-    df['y_check_decrease'] = df.groupby('dataset_location')['check'].apply(f)
-
-    # df.columns.str.lower()
-    # setting_cols = [col for col in df.columns if 'setting' in col or 'mode' in col]
-    # df['is_setting_changed'] = df[setting_cols].rolling('3600s', center = True).std().max().max() > 0
+    df['check'] = np.where(df['SpO2_change'] <= delta_change, 1, 0)
+    summ = lambda x: x.rolling(t).sum()
+    count = lambda x: x.rolling(t).count()
+    df['data_count'] = df.groupby('dataset_location')['check'].apply(summ)
+    df['y_check_decrease'] = df.groupby('dataset_location')['check'].apply(count) / df['data_count']
     df['y_value'] = np.where(df['SpO2'].isnull() == True, 'NA', 0)
-    df['y_value'] = np.where((df['check'] == 1) & (df['y_check_decrease'] >= n_decrease_lower_bound), 1,
-                             df['y_value'])  # & (df['is_setting_changed'])
-    del df['check']
+    df = df[df['y_value'] != 'NA']
+    df['y_value'] = np.where(
+        (df['check'] == 1) & (df['y_check_decrease'] >= n_decrease_lower_bound) & (df['data_count'] > int(t[:3]) / 20),
+        1, df['y_value'])  # & (df['is_setting_changed'])
+    df['sum_y_value'] = df.groupby('dataset_location')['y_value'].apply(summ)
+    df['y_cut_flag'] = np.where((df['y_value'] == 1) & (df['sum_y_value'] > 1), 'cut', df['y_value'])
+    df['y_value'] = np.where((df['y_value'] == 1) & (df['sum_y_value'] == 1), 1, 0)
+
+
+    # if within 5-10 mins. ahead has 1, then 1
+    sum5 = lambda x: x.rolling('300s').sum()
+    sum10 = lambda x: x.rolling('600s').sum()
+    df['data_y_5m'] = df.groupby('dataset_location')['y_value'].apply(sum5)
+    df['data_y_10m'] = df.groupby('dataset_location')['y_value'].apply(sum10)
+    df['y_diff'] = df['data_y_10m'] - df['data_y_5m']
+    df['y_flag'] = np.where(df['y_diff'] > 0, 1, 0)
+    del df['data_y_5m']
+    del df['data_y_10m']
+    del df['y_diff']
     df.index = range(len(df))
     return df
 
 
 # create features
-def create_features(df, t_moving='180s', t_before='600s', n_before=6):
+def create_features(df, t_moving='180s', t_before='600s', n_before=6, cols = ['Respiratory Rate', 'Mean Airway Pressure', 'Inspired Tidal Volume', 'SpO2']):
     data = df.copy()
-    cols = ['Respiratory Rate', 'Mean Airway Pressure', 'Inspired Tidal Volume', 'SpO2']
 
     # Moving Average ############################################################################################
     data.sort_values(by=['dataset_location', 'dataset_datetime'], inplace=True)
     data.index = data['dataset_datetime']
     mean = data.groupby('dataset_location')[cols].rolling(t_moving).mean().reset_index()
-    # mean.rename(columns = {col: '{}_{}'.format(col, 'moving_mean_avg') for col in (cols)}, inplace = True)
+    mean.rename(columns = {col: '{}_{}'.format(col, 'moving_mean_avg') for col in (cols)}, inplace = True)
     sd = data.groupby('dataset_location')[cols].rolling(t_moving).std().reset_index()
-    # sd.rename(columns = {col: '{}_{}'.format(col, 'moving_sd_avg') for col in (cols)}, inplace = True)
+    sd.rename(columns = {col: '{}_{}'.format(col, 'moving_sd_avg') for col in (cols)}, inplace = True)
 
-    for i, col in enumerate(cols):
-        colname = col + "_moving_mean_avg"
-        data[colname] = mean[col]
-        colname = col + "_moving_sd_avg"
-        data[colname] = sd[col]
+    data = pd.merge(data, mean, how = 'left', on = ['dataset_location', 'dataset_datetime'])
+    data = pd.merge(data, sd, how='left', on = ['dataset_location', 'dataset_datetime'])
 
     # Average Before ###########################################################################################
     from datetime import timedelta
+    data.sort_values(by=['dataset_location', 'dataset_datetime'], inplace=True)
+    data.index = data['dataset_datetime']
+    # mean and sd 10 mins before
     mean_bf = data.groupby(['dataset_location'])[cols].rolling(t_before).mean().reset_index()
     sd_bf = data.groupby(['dataset_location'])[cols].rolling(t_before).std().reset_index()
 
+    # create list of time ex t_before = 600s >> time_delta = [600, 1200, 1800, 2400, ..., 600*(n_before+1)]
     time_delta = []
-    for i in range(1, n_before + 1):
+    for i in range(0, n_before):
         time_delta.append(int(t_before[0:3]) * i)
 
     for i, s in enumerate(time_delta):
+        # create new column: datetime-time_delta
         col_name = 'datetime_' + str(s) + "s_bf"
         data[col_name] = data['dataset_datetime'] - timedelta(seconds=s)
 
+        # mean
         mean_df = mean_bf.copy()
         mean_df = mean_df.rename(columns={'dataset_datetime': col_name})
         mean_df.rename(columns={col: '{}_{}'.format(col, 'mean' + str(s) + 's') for col in (cols)}, inplace=True)
@@ -193,7 +211,7 @@ def create_features(df, t_moving='180s', t_before='600s', n_before=6):
         std_df.rename(columns={col: '{}_{}'.format(col, 'std' + str(s) + 's') for col in (cols)}, inplace=True)
         data = pd.merge(left=data, right=std_df, how='left', left_on=[col_name, 'dataset_location'],
                         right_on=[col_name, 'dataset_location'])
-
+        del data[col_name]
     data.index = range(len(data))
     return data
 
