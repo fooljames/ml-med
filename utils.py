@@ -163,13 +163,13 @@ def check_y(df, t='180s', n_decrease_lower_bound=0.8, delta_change=-3.0):
     del df['data_y_10m']
     del df['y_diff']
     df.index = range(len(df))
+    print("Already created target(y)")
     return df
 
 
 # create features
 def create_features(df, t_moving='180s', t_before='600s', n_before=6, cols = ['Respiratory Rate', 'Mean Airway Pressure', 'Inspired Tidal Volume', 'SpO2']):
     data = df.copy()
-
     # Moving Average ############################################################################################
     data.sort_values(by=['dataset_location', 'dataset_datetime'], inplace=True)
     data.index = data['dataset_datetime']
@@ -180,7 +180,7 @@ def create_features(df, t_moving='180s', t_before='600s', n_before=6, cols = ['R
 
     data = pd.merge(data, mean, how = 'left', on = ['dataset_location', 'dataset_datetime'])
     data = pd.merge(data, sd, how='left', on = ['dataset_location', 'dataset_datetime'])
-
+    print("Already created moving average features -------------------------------------------------------")
     # Average Before ###########################################################################################
     from datetime import timedelta
     data.sort_values(by=['dataset_location', 'dataset_datetime'], inplace=True)
@@ -188,32 +188,41 @@ def create_features(df, t_moving='180s', t_before='600s', n_before=6, cols = ['R
     # mean and sd 10 mins before
     mean_bf = data.groupby(['dataset_location'])[cols].rolling(t_before).mean().reset_index()
     sd_bf = data.groupby(['dataset_location'])[cols].rolling(t_before).std().reset_index()
-
-    # create list of time ex t_before = 600s >> time_delta = [600, 1200, 1800, 2400, ..., 600*(n_before+1)]
+    # create list of time ex t_before = 600s >> time_delta = [0, 600, 1200, 1800, 2400, ..., 600*(n_before+1)]
     time_delta = []
     for i in range(0, n_before):
         time_delta.append(int(t_before[0:3]) * i)
 
+    features = []
     for i, s in enumerate(time_delta):
         # create new column: datetime-time_delta
         col_name = 'datetime_' + str(s) + "s_bf"
         data[col_name] = data['dataset_datetime'] - timedelta(seconds=s)
-
         # mean
         mean_df = mean_bf.copy()
         mean_df = mean_df.rename(columns={'dataset_datetime': col_name})
         mean_df.rename(columns={col: '{}_{}'.format(col, 'mean' + str(s) + 's') for col in (cols)}, inplace=True)
+        features.extend(list(mean_df.columns))
+
         data = pd.merge(left=data, right=mean_df, how='left', left_on=[col_name, 'dataset_location'],
                         right_on=[col_name, 'dataset_location'])
-
         std_df = sd_bf.copy()
         std_df = std_df.rename(columns={'dataset_datetime': col_name})
         std_df.rename(columns={col: '{}_{}'.format(col, 'std' + str(s) + 's') for col in (cols)}, inplace=True)
         data = pd.merge(left=data, right=std_df, how='left', left_on=[col_name, 'dataset_location'],
                         right_on=[col_name, 'dataset_location'])
+        features.extend(list(std_df.columns))
         del data[col_name]
+        print("Already created avg and sd of features at %s secs before " % (s))
+    features = [x for x in features if "datetime" not in x]
+    features = [x for x in features if "location" not in x]
+
+    data['delete_flag'] = 0
+    for f in features:
+        data['delete_flag'] = np.where(data[f].isnull() == True, 1, data['delete_flag'])
+
     data.index = range(len(data))
-    return data
+    return data, features
 
 
 def remove_non_ascii(s):
