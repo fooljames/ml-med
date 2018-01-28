@@ -58,7 +58,9 @@ def addTimeInSec(df):
 def mean_by_interval(df, interval = 10):
     df = df.copy(deep=True)
     df['dataset_datetime'] = pd.to_datetime(df['time_in_sec'] // interval * interval, unit='s')
-    df = df.groupby(['dataset_datetime', 'dataset_location']).mean().reset_index()
+    #df = df.groupby(['dataset_datetime', 'dataset_location']).mean().reset_index()
+    df.index = df['dataset_datetime']
+    df = df.groupby('dataset_location').resample('10S', how='mean').reset_index()
     return df
 
 
@@ -133,7 +135,7 @@ def load_data_output(datapath):
 
 
 # check y
-def check_y(df, t='180s', n_decrease_lower_bound=0.8, delta_change=-3.0):
+def check_y(df, t='180s', n_decrease_lower_bound=0.8, delta_change=-3.0, start = 300, end = 600):
     df['SpO2_change'] = df['SpO2'] - df['SpO2_moving_avg']
     df.sort_values(by=['dataset_location', 'dataset_datetime'], inplace=True)
     df.index = df['dataset_datetime']
@@ -150,17 +152,22 @@ def check_y(df, t='180s', n_decrease_lower_bound=0.8, delta_change=-3.0):
     df['sum_y_value'] = df.groupby('dataset_location')['y_value'].apply(summ)
     df['y_cut_flag'] = np.where((df['y_value'] == 1) & (df['sum_y_value'] > 1), 'cut', df['y_value'])
     df['y_value'] = np.where((df['y_value'] == 1) & (df['sum_y_value'] == 1), 1, 0)
+    df = df[df['y_cut_flag'] != 'cut']
 
+    # if within start-end mins. ahead has 1, then 1
+    #sum_start = lambda x: x.rolling(start).sum()
+    #sum_end = lambda x: x.rolling(end).sum()
+    start_window = start // 10
+    end_window = end // 10
+    sum_start = lambda x: pd.rolling_sum(x[::-1], window = start_window, min_periods = 0)[::-1]
+    sum_end = lambda x: pd.rolling_sum(x[::-1], window = end_window, min_periods = 0)[::-1]
+    df['data_y_start'] = df.groupby('dataset_location')['y_value'].apply(sum_start)
 
-    # if within 5-10 mins. ahead has 1, then 1
-    sum5 = lambda x: x.rolling('300s').sum()
-    sum10 = lambda x: x.rolling('600s').sum()
-    df['data_y_5m'] = df.groupby('dataset_location')['y_value'].apply(sum5)
-    df['data_y_10m'] = df.groupby('dataset_location')['y_value'].apply(sum10)
-    df['y_diff'] = df['data_y_10m'] - df['data_y_5m']
+    df['data_y_end'] = df.groupby('dataset_location')['y_value'].apply(sum_end)
+    df['y_diff'] = df['data_y_end'] - df['data_y_start']
     df['y_flag'] = np.where(df['y_diff'] > 0, 1, 0)
-    del df['data_y_5m']
-    del df['data_y_10m']
+    del df['data_y_start']
+    del df['data_y_end']
     del df['y_diff']
     df.index = range(len(df))
     print("Already created target(y)")
@@ -170,6 +177,7 @@ def check_y(df, t='180s', n_decrease_lower_bound=0.8, delta_change=-3.0):
 # create features
 def create_features(df, t_moving='180s', t_before='600s', n_before=6, cols = ['Respiratory Rate', 'Mean Airway Pressure', 'Inspired Tidal Volume', 'SpO2']):
     data = df.copy()
+    features = []
     # Moving Average ############################################################################################
     data.sort_values(by=['dataset_location', 'dataset_datetime'], inplace=True)
     data.index = data['dataset_datetime']
@@ -181,6 +189,9 @@ def create_features(df, t_moving='180s', t_before='600s', n_before=6, cols = ['R
     data = pd.merge(data, mean, how = 'left', on = ['dataset_location', 'dataset_datetime'])
     data = pd.merge(data, sd, how='left', on = ['dataset_location', 'dataset_datetime'])
     print("Already created moving average features -------------------------------------------------------")
+    features.extend(list(mean.columns))
+    features.extend(list(sd.columns))
+
     # Average Before ###########################################################################################
     from datetime import timedelta
     data.sort_values(by=['dataset_location', 'dataset_datetime'], inplace=True)
@@ -193,7 +204,6 @@ def create_features(df, t_moving='180s', t_before='600s', n_before=6, cols = ['R
     for i in range(0, n_before):
         time_delta.append(int(t_before[0:3]) * i)
 
-    features = []
     for i, s in enumerate(time_delta):
         # create new column: datetime-time_delta
         col_name = 'datetime_' + str(s) + "s_bf"
@@ -220,7 +230,7 @@ def create_features(df, t_moving='180s', t_before='600s', n_before=6, cols = ['R
     data['delete_flag'] = 0
     for f in features:
         data['delete_flag'] = np.where(data[f].isnull() == True, 1, data['delete_flag'])
-
+    data = data[data['delete_flag'] == 0]
     data.index = range(len(data))
     return data, features
 
