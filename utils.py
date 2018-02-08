@@ -55,16 +55,16 @@ def addTimeInSec(df):
     return df
 
 
-def mean_by_interval(df, interval = 10):
+def mean_by_interval(df, interval=10):
     df = df.copy(deep=True)
     df['dataset_datetime'] = pd.to_datetime(df['time_in_sec'] // interval * interval, unit='s')
-    #df = df.groupby(['dataset_datetime', 'dataset_location']).mean().reset_index()
+    # df = df.groupby(['dataset_datetime', 'dataset_location']).mean().reset_index()
     df.index = df['dataset_datetime']
     df = df.groupby('dataset_location').resample('10S', how='mean').reset_index()
     return df
 
 
-def moving_avg(df, t = '600s'):
+def moving_avg(df, t='600s'):
     df.index = df['dataset_datetime']
     rolling_mean = df.groupby('dataset_location')['SpO2'].rolling(t).mean().reset_index()
     rolling_mean.rename(columns={'SpO2': 'SpO2_moving_avg'}, inplace=True)
@@ -135,7 +135,7 @@ def load_data_output(datapath):
 
 
 # check y
-def check_y(df, t='180s', n_decrease_lower_bound=0.8, delta_change=-3.0, start = 300, end = 600):
+def check_y(df, t='180s', n_decrease_lower_bound=0.8, delta_change=-3.0, start=300, end=600):
     df['SpO2_change'] = df['SpO2'] - df['SpO2_moving_avg']
     df.sort_values(by=['dataset_location', 'dataset_datetime'], inplace=True)
     df.index = df['dataset_datetime']
@@ -155,12 +155,12 @@ def check_y(df, t='180s', n_decrease_lower_bound=0.8, delta_change=-3.0, start =
     df = df[df['y_cut_flag'] != 'cut']
 
     # if within start-end mins. ahead has 1, then 1
-    #sum_start = lambda x: x.rolling(start).sum()
-    #sum_end = lambda x: x.rolling(end).sum()
+    # sum_start = lambda x: x.rolling(start).sum()
+    # sum_end = lambda x: x.rolling(end).sum()
     start_window = start // 10
     end_window = end // 10
-    sum_start = lambda x: pd.rolling_sum(x[::-1], window = start_window, min_periods = 0)[::-1]
-    sum_end = lambda x: pd.rolling_sum(x[::-1], window = end_window, min_periods = 0)[::-1]
+    sum_start = lambda x: pd.rolling_sum(x[::-1], window=start_window, min_periods=0)[::-1]
+    sum_end = lambda x: pd.rolling_sum(x[::-1], window=end_window, min_periods=0)[::-1]
     df['data_y_start'] = df.groupby('dataset_location')['y_value'].apply(sum_start)
 
     df['data_y_end'] = df.groupby('dataset_location')['y_value'].apply(sum_end)
@@ -175,19 +175,20 @@ def check_y(df, t='180s', n_decrease_lower_bound=0.8, delta_change=-3.0, start =
 
 
 # create features
-def create_features(df, t_moving='180s', t_before='600s', n_before=6, cols = ['Respiratory Rate', 'Mean Airway Pressure', 'Inspired Tidal Volume', 'SpO2']):
+def create_features(df, t_moving='180s', t_before='600s', n_before=6,
+                    cols=['Respiratory Rate', 'Mean Airway Pressure', 'Inspired Tidal Volume', 'SpO2']):
     data = df.copy()
     features = []
     # Moving Average ############################################################################################
     data.sort_values(by=['dataset_location', 'dataset_datetime'], inplace=True)
     data.index = data['dataset_datetime']
     mean = data.groupby('dataset_location')[cols].rolling(t_moving).mean().reset_index()
-    mean.rename(columns = {col: '{}_{}'.format(col, 'moving_mean_avg') for col in (cols)}, inplace = True)
+    mean.rename(columns={col: '{}_{}'.format(col, 'moving_mean_avg') for col in (cols)}, inplace=True)
     sd = data.groupby('dataset_location')[cols].rolling(t_moving).std().reset_index()
-    sd.rename(columns = {col: '{}_{}'.format(col, 'moving_sd_avg') for col in (cols)}, inplace = True)
+    sd.rename(columns={col: '{}_{}'.format(col, 'moving_sd_avg') for col in (cols)}, inplace=True)
 
-    data = pd.merge(data, mean, how = 'left', on = ['dataset_location', 'dataset_datetime'])
-    data = pd.merge(data, sd, how='left', on = ['dataset_location', 'dataset_datetime'])
+    data = pd.merge(data, mean, how='left', on=['dataset_location', 'dataset_datetime'])
+    data = pd.merge(data, sd, how='left', on=['dataset_location', 'dataset_datetime'])
     print("Already created moving average features -------------------------------------------------------")
     features.extend(list(mean.columns))
     features.extend(list(sd.columns))
@@ -319,4 +320,3 @@ def patient(df, first_admit_path, follow_up_path):
             print('location: %s since %s to %s' % (y, mindate, maxdate))
         print('-------------------------------------------------------------------------------------------------')
     return df_test
-
