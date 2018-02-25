@@ -62,8 +62,7 @@ res_df = pd.DataFrame()
 for n in range(max_iter):
     colsample_bytree = np.random.uniform(0.1, 0.9)
     subsample = np.random.uniform(0.1, 0.9)
-    learning_rate = np.exp(np.random.uniform(-2, 1))
-    params = dict(colsample_bytree=colsample_bytree, subsample=subsample, learning_rate=learning_rate)
+    params = dict(colsample_bytree=colsample_bytree, subsample=subsample)
     auc, best_ntree_limit = get_auc(params)
     res_df = res_df.append(pd.DataFrame([[params, np.mean(auc), np.mean(best_ntree_limit)]],
                                         columns=['params', 'auc', 'best_ntree_limit']))
