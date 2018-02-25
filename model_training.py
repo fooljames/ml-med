@@ -6,7 +6,7 @@ from xgboost import XGBClassifier
 
 df = pd.read_pickle(output_pkl)
 
-target_df = check_y(df, n_decrease_lower_bound=0.5, delta_change=-2.5, start=540, end=600)
+target_df = check_y(df, n_decrease_lower_bound=0.5, delta_change=-2, start=600, end=720)
 
 cols = ['Respiratory Rate'
     , 'Mean Airway Pressure'
@@ -16,7 +16,7 @@ cols = ['Respiratory Rate'
     , 'Extrinsic PEEP'
     , 'Pulse Rate']
 
-feature_df, features = create_features(target_df, n_before=6, t_before='300s', cols=cols)
+feature_df, features = create_features(target_df, n_before=3, t_before='300s', cols=cols)
 feature_df = feature_df[~feature_df['SpO2'].isnull()]
 
 valid_locations = feature_df.groupby("dataset_location")['y_flag'] \
@@ -50,7 +50,7 @@ def get_auc(params):
         x_resampled, y_resampled = x_train[resampled_idx], y_train[resampled_idx]
 
         eval_set = [(x_test, y_test)]
-        clf.fit(x_resampled, y_resampled, early_stopping_rounds=50, eval_metric=["auc"], eval_set=eval_set,
+        clf.fit(x_resampled, y_resampled, early_stopping_rounds=20, eval_metric=["auc"], eval_set=eval_set,
                 verbose=True)
         auc.append(clf.best_score)
         best_ntree_limit.append(clf.best_ntree_limit)
@@ -73,3 +73,19 @@ best_ntree_limit = best_df.best_ntree_limit[0]
 best_params['n_estimators'] = int(best_ntree_limit) + 300
 best_auc = get_auc(best_params)
 np.mean(best_auc[0])
+
+test_loc = ['MICU2-6FL-B1', 'MICU2-6FL-B7', 'MICU2-6FL-B6']
+x_train = x_data[~feature_df.dataset_location.isin(test_loc)]
+x_test = x_data[feature_df.dataset_location.isin(test_loc)]
+y_train = y_data[~feature_df.dataset_location.isin(test_loc)]
+y_test = y_data[feature_df.dataset_location.isin(test_loc)]
+
+resampled_idx = under_sampling(y_train, 0.1)
+x_resampled, y_resampled = x_train[resampled_idx], y_train[resampled_idx]
+
+eval_set = [(x_test, y_test)]
+clf = XGBClassifier(n_estimators=500)
+# clf.set_params(**best_params)
+clf.fit(x_resampled, y_resampled, early_stopping_rounds=20, eval_metric=["auc"], eval_set=eval_set, verbose=True)
+
+y_pred = clf.predict_proba(x_test)
