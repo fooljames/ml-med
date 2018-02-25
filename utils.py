@@ -1,5 +1,5 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
 import glob
 
 location_date = ['dataset_location', 'dataset_datetime']
@@ -75,6 +75,29 @@ def moving_avg(df, t = '600s'):
     return df
 
 
+def moving_trim_avg(df, col, t='600s', percentile=0.1):
+    df.sort_values(by=['dataset_location', 'dataset_datetime'], inplace=True)
+    df.index = df['dataset_datetime']
+
+    features_delta = []
+    for col_ in col:
+        func_percentile = lambda x: pd.rolling_quantile(x, window=t, quantile=percentile, min_periods=0)
+        df['quantile'] = df.groupby('dataset_location')[col_].apply(func_percentile)
+        df['check_lowerbound'] = np.where(df[col_] > df['quantile'], df[col_], float('nan'))
+        df['check_lowerbound'] = np.where(df[col_] <= df['quantile'], df['quantile'], df['check_lowerbound'])
+        colname = col_ + '_moving_avg'
+        func_mean = lambda x: pd.rolling_mean(x, window=t, min_periods=0)
+        df[colname] = df.groupby('dataset_location')['check_lowerbound'].apply(func_mean)
+        colname1 = col_ + '_change'
+        df[colname1] = df[col_] - df[colname]
+        features_delta.append(colname1)
+
+        del df['check_lowerbound']
+        del df['quantile']
+    df.index = range(len(df))
+    return df, features_delta
+
+
 # merge capsule and phlilp file ato be output file
 def merge_file(phlilps_path, capsule_path, output_path):
     phlilps_list = glob.glob(phlilps_path + "/phlilps*.csv")
@@ -136,14 +159,14 @@ def load_data_output(datapath):
 
 # check y
 def check_y(df, t='180s', n_decrease_lower_bound=0.8, delta_change=-3.0, start = 300, end = 600):
-    df['SpO2_change'] = df['SpO2'] - df['SpO2_moving_avg']
+    # df['SpO2_change'] = df['SpO2'] - df['SpO2_moving_avg']
     df.sort_values(by=['dataset_location', 'dataset_datetime'], inplace=True)
     df.index = df['dataset_datetime']
     df['check'] = np.where(df['SpO2_change'] <= delta_change, 1, 0)
     summ = lambda x: x.rolling(t).sum()
     count = lambda x: x.rolling(t).count()
-    df['data_count'] = df.groupby('dataset_location')['check'].apply(summ)
-    df['y_check_decrease'] = df.groupby('dataset_location')['check'].apply(count) / df['data_count']
+    df['data_count'] = df.groupby('dataset_location')['check'].apply(count)
+    df['y_check_decrease'] = df.groupby('dataset_location')['check'].apply(summ) / df['data_count']
     df['y_value'] = np.where(df['SpO2'].isnull() == True, 'NA', 0)
     df = df[df['y_value'] != 'NA']
     df['y_value'] = np.where(
@@ -154,17 +177,14 @@ def check_y(df, t='180s', n_decrease_lower_bound=0.8, delta_change=-3.0, start =
     df['y_value'] = np.where((df['y_value'] == 1) & (df['sum_y_value'] == 1), 1, 0)
     df = df[df['y_cut_flag'] != 'cut']
 
-    # if within start-end mins. ahead has 1, then 1
-    #sum_start = lambda x: x.rolling(start).sum()
-    #sum_end = lambda x: x.rolling(end).sum()
     start_window = start // 10
     end_window = end // 10
     sum_start = lambda x: pd.rolling_sum(x[::-1], window = start_window, min_periods = 0)[::-1]
     sum_end = lambda x: pd.rolling_sum(x[::-1], window = end_window, min_periods = 0)[::-1]
     df['data_y_start'] = df.groupby('dataset_location')['y_value'].apply(sum_start)
-
     df['data_y_end'] = df.groupby('dataset_location')['y_value'].apply(sum_end)
     df['y_diff'] = df['data_y_end'] - df['data_y_start']
+
     df['y_flag'] = np.where(df['y_diff'] > 0, 1, 0)
     del df['data_y_start']
     del df['data_y_end']
@@ -319,4 +339,33 @@ def patient(df, first_admit_path, follow_up_path):
             print('location: %s since %s to %s' % (y, mindate, maxdate))
         print('-------------------------------------------------------------------------------------------------')
     return df_test
+
+def roc_curve(x_test, y_test):
+    from sklearn.metrics import roc_curve, auc, roc_auc_score
+
+    pred_prob = Model.predict_proba(x_test)
+    fpr, tpr, thresholds = roc_curve(y_test, pred_prob[:, 1])
+    roc_auc = auc(fpr, tpr)
+
+    plt.figure(figsize=(15, 10), dpi= 80, facecolor='w', edgecolor='k')
+    plt.plot(fpr, tpr, label='ROC curve (area = %0.2f)' % (roc_auc))
+    plt.plot([0, 1], [0, 1], 'k--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate', fontsize=14)
+    plt.ylabel('True Positive Rate', fontsize=14)
+    plt.title('Receiver operating characteristic', fontsize=18)
+    plt.legend(loc="lower right", prop={'size': 14})
+
+    # create the axis of thresholds (scores)
+    ax2 = plt.gca().twinx()
+    ax2.plot(fpr, thresholds, markeredgecolor='r',linestyle='dashed', color='r')
+    ax2.set_ylabel('Threshold',color='r', fontsize=14)
+    ax2.tick_params(labelsize = 12)
+    ax2.set_ylim([thresholds[-1],thresholds[0]])
+    ax2.set_xlim([fpr[0],fpr[-1]])
+
+    plt.show()
+    plt.savefig('roc_and_threshold.png')
+    plt.close()
 
