@@ -345,13 +345,13 @@ def patient(df, first_admit_path, follow_up_path):
     return df_test
 
 
-def roc_curve(x_test, y_test, model):
+def plot_roc_curve(x_test, y_test, model):
     pred_prob = model.predict_proba(x_test)
     fpr, tpr, thresholds = roc_curve(y_test, pred_prob[:, 1])
     roc_auc = auc(fpr, tpr)
 
     plt.figure(figsize=(15, 10), dpi=80, facecolor='w', edgecolor='k')
-    plt.plot(fpr, tpr, label='ROC curve (area = %0.2f)' % (roc_auc))
+    plt.plot(fpr, tpr, label='ROC curve (area = %0.1f)' % (roc_auc))
     plt.plot([0, 1], [0, 1], 'k--')
     plt.xlim([0.0, 1.0])
     plt.ylim([0.0, 1.05])
