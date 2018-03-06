@@ -4,6 +4,7 @@ from utils import *
 import pandas as pd
 from xgboost import XGBClassifier
 import pickle
+
 df = pd.read_pickle(output_pkl)
 
 cols = ['Respiratory Rate'
@@ -57,41 +58,24 @@ def get_auc(params):
         best_ntree_limit.append(clf.best_ntree_limit)
     return auc, best_ntree_limit
 
-#
-# max_iter = 20
-# res_df = pd.DataFrame()
-# for n in range(max_iter):
-#     colsample_bytree = np.random.uniform(0.1, 0.9)
-#     subsample = np.random.uniform(0.1, 0.9)
-#     params = dict(colsample_bytree=colsample_bytree, subsample=subsample)
-#     auc, best_ntree_limit = get_auc(params)
-#     res_df = res_df.append(pd.DataFrame([[params, np.mean(auc), np.mean(best_ntree_limit)]],
-#                                         columns=['params', 'auc', 'best_ntree_limit']))
-#
-# best_df = res_df[res_df.auc == np.max(res_df.auc)]
-# best_params = best_df.params[0]
-# best_ntree_limit = best_df.best_ntree_limit[0]
-# best_params['n_estimators'] = int(best_ntree_limit) + 300
-# best_auc = get_auc(best_params)
-# np.mean(best_auc[0])
 
-test_loc = ['MICU2-6FL-B1', 'MICU2-6FL-B7', 'MICU2-6FL-B6']
-x_train = x_data[~feature_df.dataset_location.isin(test_loc)]
-x_test = x_data[feature_df.dataset_location.isin(test_loc)]
-y_train = y_data[~feature_df.dataset_location.isin(test_loc)]
-y_test = y_data[feature_df.dataset_location.isin(test_loc)]
+max_iter = 20
+res_df = pd.DataFrame()
+for n in range(max_iter):
+    colsample_bytree = np.random.uniform(0.1, 0.9)
+    subsample = np.random.uniform(0.1, 0.9)
+    params = dict(colsample_bytree=colsample_bytree, subsample=subsample)
+    auc, best_ntree_limit = get_auc(params)
+    res_df = res_df.append(pd.DataFrame([[params, np.mean(auc), np.mean(best_ntree_limit)]],
+                                        columns=['params', 'auc', 'best_ntree_limit']))
 
-resampled_idx = under_sampling(y_train, 0.1)
-x_resampled, y_resampled = x_train[resampled_idx], y_train[resampled_idx]
+best_df = res_df[res_df.auc == np.max(res_df.auc)]
+best_params = best_df.params[0]
+best_ntree_limit = best_df.best_ntree_limit[0]
 
-eval_set = [(x_test, y_test)]
-clf = XGBClassifier(n_estimators=500, subsample=0.8)
-# clf.set_params(**best_params)
-clf.fit(x_resampled, y_resampled, early_stopping_rounds=20, eval_metric=["auc"], eval_set=eval_set, verbose=True)
+clf = XGBClassifier(n_estimators=best_ntree_limit)
+clf.set_params(**best_params)
+clf.fit(x_data, y_data, verbose=True)
 
 # save model to file
 pickle.dump(clf, open("model.pickle.dat", "wb"))
-
-y_pred = clf.predict_proba(x_test)
-
-plot_roc_curve(x_test, y_test, clf)
