@@ -1,8 +1,6 @@
 import numpy as np
 import pandas as pd
 import glob
-import matplotlib.pyplot as plt
-from sklearn.metrics import roc_curve, auc
 
 location_date = ['dataset_location', 'dataset_datetime']
 
@@ -344,30 +342,29 @@ def patient(df, first_admit_path, follow_up_path):
         print('-------------------------------------------------------------------------------------------------')
     return df_test
 
-
-def plot_roc_curve(x_test, y_test, model):
-    pred_prob = model.predict_proba(x_test)
-    fpr, tpr, thresholds = roc_curve(y_test, pred_prob[:, 1])
-    roc_auc = auc(fpr, tpr)
-
-    plt.figure(figsize=(15, 10), dpi=80, facecolor='w', edgecolor='k')
-    plt.plot(fpr, tpr, label='ROC curve (area = %0.1f)' % (roc_auc))
-    plt.plot([0, 1], [0, 1], 'k--')
-    plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.05])
-    plt.xlabel('False Positive Rate', fontsize=14)
-    plt.ylabel('True Positive Rate', fontsize=14)
-    plt.title('Receiver operating characteristic', fontsize=18)
-    plt.legend(loc="lower right", prop={'size': 14})
-
-    # create the axis of thresholds (scores)
-    ax2 = plt.gca().twinx()
-    ax2.plot(fpr, thresholds, markeredgecolor='r', linestyle='dashed', color='r')
-    ax2.set_ylabel('Threshold', color='r', fontsize=14)
-    ax2.tick_params(labelsize=12)
-    ax2.set_ylim([thresholds[-1], thresholds[0]])
-    ax2.set_xlim([fpr[0], fpr[-1]])
-
-    plt.show()
-    plt.savefig('roc_and_threshold.png')
-    plt.close()
+# def plot_roc_curve(x_test, y_test, model):
+#     pred_prob = model.predict_proba(x_test)
+#     fpr, tpr, thresholds = roc_curve(y_test, pred_prob[:, 1])
+#     roc_auc = auc(fpr, tpr)
+#
+#     plt.figure(figsize=(15, 10), dpi=80, facecolor='w', edgecolor='k')
+#     plt.plot(fpr, tpr, label='ROC curve (area = %0.1f)' % (roc_auc))
+#     plt.plot([0, 1], [0, 1], 'k--')
+#     plt.xlim([0.0, 1.0])
+#     plt.ylim([0.0, 1.05])
+#     plt.xlabel('False Positive Rate', fontsize=14)
+#     plt.ylabel('True Positive Rate', fontsize=14)
+#     plt.title('Receiver operating characteristic', fontsize=18)
+#     plt.legend(loc="lower right", prop={'size': 14})
+#
+#     # create the axis of thresholds (scores)
+#     ax2 = plt.gca().twinx()
+#     ax2.plot(fpr, thresholds, markeredgecolor='r', linestyle='dashed', color='r')
+#     ax2.set_ylabel('Threshold', color='r', fontsize=14)
+#     ax2.tick_params(labelsize=12)
+#     ax2.set_ylim([thresholds[-1], thresholds[0]])
+#     ax2.set_xlim([fpr[0], fpr[-1]])
+#
+#     plt.show()
+#     plt.savefig('roc_and_threshold.png')
+#     plt.close()
